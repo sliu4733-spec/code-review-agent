@@ -16,7 +16,7 @@ from src.agents.arbiter import ArbiterAgent
 from src.agents.base import ReviewFinding
 from src.core.debate import detect_conflicts, conduct_debate
 from src.core.knowledge import KnowledgeBase
-from src.core.reviewer import _build_project_context, _cross_file_check, _quality_filter
+from src.core.reviewer import _build_project_context, _cross_file_check, _quality_filter, _inject_finding_ids
 from src.core.voting import run_multi_model_review
 from src.core.diff_review import run_diff_review
 
@@ -296,7 +296,21 @@ async def review_diff(req: dict):
 
 
 def _run_single_review(code: str, file_path: str, mode: str) -> dict:
-    """执行单文件审查，返回完整结果字典"""
+    """执行单文件审查，返回完整结果字典。异常自动兜底。"""
+    try:
+        return _do_review(code, file_path, mode)
+    except Exception as e:
+        import logging
+        logging.exception(f"Review failed for {file_path}")
+        return {
+            "findings": [], "count": 0,
+            "severity_breakdown": {}, "report": f"审查异常: {str(e)[:100]}",
+            "debate_context": "", "debate_transcripts": [],
+            "agent_raw": {}, "timing": {"agent_time": 0, "total_time": 0},
+        }
+
+
+def _do_review(code: str, file_path: str, mode: str) -> dict:
     t0 = time.time()
 
     def safe_analyze(agent, code, fp, fs):
@@ -357,7 +371,8 @@ def _run_single_review(code: str, file_path: str, mode: str) -> dict:
         else:
             findings = sec + perf + maint
 
-    # 统一质量过滤（与 CLI 一致）
+    # 统一质量过滤 + ID注入（与 CLI 一致）
+    findings = _inject_finding_ids(findings, file_path)
     findings = _quality_filter(findings)
 
     total_time = time.time() - t0

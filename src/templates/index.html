@@ -307,7 +307,11 @@ function renderMarkdown(md) {
 }
 
 function renderResult(data) {
-    var b = data.severity_breakdown || {};
+    if (!data) data = {};
+    if (!data.findings) data.findings = [];
+    if (!data.report) data.report = '';
+    if (!data.severity_breakdown) data.severity_breakdown = {};
+    var b = data.severity_breakdown;
     var html = '';
     if (b.critical) html += '<span class="count-badge critical">严重 '+b.critical+'</span> ';
     if (b.high) html += '<span class="count-badge high">高危 '+b.high+'</span> ';
@@ -501,7 +505,7 @@ function injectFeedbackButtons() {
 }
 
 function submitWebFeedback(title, action, btn) {
-    var fp = window._lastFilePath || 'web-input';
+    var fp = window._lastFilePath || 'web-input.py';
     fetch('/api/feedback', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -511,7 +515,12 @@ function submitWebFeedback(title, action, btn) {
             btn.textContent = action === 'confirm' ? '已确认' : '已驳回';
             btn.style.opacity = '0.5';
             btn.onclick = null;
+        } else {
+            btn.textContent = action === 'confirm' ? '确认(失败)' : '驳回(失败)';
+            btn.style.color = '#888';
         }
+    }).catch(function(){
+        btn.textContent = '网络错误';
     });
 }
 </script>

@@ -1,0 +1,17 @@
+{
+  "languages": {
+    "python": 78
+  },
+  "categories": {
+    "maintainability": 61,
+    "performance": 11,
+    "security": 6
+  },
+  "severities": {
+    "medium": 49,
+    "low": 9,
+    "high": 20
+  },
+  "last_updated": 1781236508.1994271,
+  "total_findings": 78
+}

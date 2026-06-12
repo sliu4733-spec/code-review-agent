@@ -1,0 +1,67 @@
+name: Code Review Agent
+#这个on块表示在什么条件下触发这个工作流
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.py'
+      - '**.js'
+      - '**.ts'
+      - '**.jsx'
+      - '**.tsx'
+
+jobs:
+  review:
+    runs-on: ubuntu-latest #运行的环境
+    permissions: #权限
+      contents: read #读取仓库内容的权限
+      pull-requests: write #对PR进行写操作
+
+    steps:
+      - uses: actions/checkout@v4 #把代码下载到这个虚拟机中(使用的是第三方,类似于函数调用)
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' #设置虚拟机中Python的版本
+
+      - name: Install dependencies #下载依赖
+        run: | #是通过读requirements.txt文件来明确要下载哪些依赖到虚拟机中
+          pip install -r requirements.txt  
+
+      - name: Get changed files #获得哪些文件被改变了
+        id: changed-files #给这个操作取一个id,这个很关键,后面调用就可以使用这个id
+        uses: tj-actions/changed-files@v44 #通过第三方(使用别人写好的)来完成获取到哪些文件已经被改变了
+        with:
+          files: |
+            **.py
+            **.js
+            **.ts
+            **.jsx
+            **.tsx
+
+      - name: Run Code Review
+        env:
+          PROVIDER: openai
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: https://api.deepseek.com
+          OPENAI_MODEL: deepseek-chat
+        run: |
+          echo "## Code Review Results" > review-report.md
+          echo "" >> review-report.md
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            if [ -f "$file" ]; then
+              echo "### Reviewing: \`$file\`" >> review-report.md
+              python -m src review "$file" --mode single --output /tmp/review.md 2>&1 || true
+              if [ -f /tmp/review.md ]; then
+                cat /tmp/review.md >> review-report.md
+              fi
+              echo "---" >> review-report.md
+            fi
+          done
+
+      - name: Comment PR #进行对PR评论
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          filePath: review-report.md
+          comment_tag: code-review

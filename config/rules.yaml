@@ -1,0 +1,121 @@
+# ============================================================
+# Code Review Agent — 自定义审查规则配置
+# 修改此文件即可调整审查行为，无需改动代码
+# ============================================================
+
+# ---- 全局设置 ----
+global:
+  strictness: medium        # strict | medium | loose — 严格程度
+  max_findings_per_file: 15 # 单文件最多报告数
+  min_confidence: 0.4       # 最低置信度阈值 (0-1)
+
+# ---- 安全检查 ----
+security:
+  enabled: true
+  rules:
+    - id: sql_injection
+      name: SQL注入检测
+      severity: critical
+      enabled: true
+    - id: xss
+      name: 跨站脚本攻击(XSS)
+      severity: critical
+      enabled: true
+    - id: hardcoded_secret
+      name: 硬编码密钥/密码
+      severity: high
+      enabled: true
+    - id: command_injection
+      name: 命令注入
+      severity: critical
+      enabled: true
+    - id: path_traversal
+      name: 路径遍历
+      severity: high
+      enabled: true
+    - id: insecure_crypto
+      name: 不安全加密算法(MD5/SHA1)
+      severity: high
+      enabled: true
+    - id: insecure_random
+      name: 不安全随机数生成
+      severity: medium
+      enabled: true
+    - id: cors_misconfig
+      name: CORS配置错误
+      severity: high
+      enabled: true
+
+# ---- 性能检查 ----
+performance:
+  enabled: true
+  rules:
+    - id: n_plus_one
+      name: N+1查询问题
+      severity: high
+      enabled: true
+    - id: missing_pagination
+      name: 缺少分页
+      severity: high
+      enabled: true
+    - id: sync_blocking
+      name: 同步阻塞调用
+      severity: high
+      enabled: true
+    - id: memory_leak
+      name: 内存泄漏风险
+      severity: medium
+      enabled: true
+    - id: connection_pool
+      name: 连接池未复用
+      severity: medium
+      enabled: true
+    - id: regex_recompile
+      name: 正则重复编译
+      severity: low
+      enabled: true
+
+# ---- 可维护性检查 ----
+maintainability:
+  enabled: true
+  rules:
+    - id: code_duplication
+      name: 重复代码
+      severity: medium
+      enabled: true
+    - id: god_class
+      name: 上帝类/职责过多
+      severity: high
+      enabled: true
+    - id: long_method
+      name: 方法过长
+      severity: medium
+      enabled: true
+    - id: deep_nesting
+      name: 深层嵌套
+      severity: medium
+      enabled: true
+    - id: magic_number
+      name: 魔法数字
+      severity: low
+      enabled: false   # 默认关闭（误报率高）
+    - id: too_many_params
+      name: 参数过多
+      severity: low
+      enabled: false   # 默认关闭（误报率高）
+    - id: missing_error_handling
+      name: 缺少异常处理
+      severity: medium
+      enabled: true
+    - id: any_type_abuse
+      name: any类型滥用
+      severity: low
+      enabled: false   # 默认关闭（误报率高）
+
+# ---- 支持的语言 ----
+languages:
+  - python
+  - javascript
+  - typescript
+  - java
+  - go

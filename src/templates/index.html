@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Review Agent v3.1</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+header { text-align: center; padding: 20px 0; }
+header h1 { font-size: 28px; color: #ff6b35; }
+header p { color: #888; margin-top: 8px; }
+.main { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+.panel { background: #16213e; border-radius: 12px; padding: 20px; }
+.panel h2 { font-size: 16px; color: #888; margin-bottom: 12px; text-transform: uppercase; }
+textarea { width: 100%; background: #0f0f23; color: #e0e0e0;
+           border: 1px solid #333; border-radius: 8px; padding: 12px;
+           font-family: 'Consolas', monospace; font-size: 13px; resize: vertical; }
+.controls { display: flex; gap: 12px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+button { padding: 10px 20px; background: #ff6b35; color: #fff; border: none;
+         border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+button:hover { background: #e55a2b; }
+button:disabled { background: #555; cursor: not-allowed; }
+button.small { padding: 6px 14px; font-size: 12px; background: #333; }
+button.small:hover { background: #555; }
+select { padding: 8px 14px; background: #0f0f23; color: #e0e0e0;
+         border: 1px solid #333; border-radius: 8px; font-size: 13px; }
+.mode-tabs { display: flex; gap: 0; margin-bottom: 12px; }
+.mode-tab { padding: 8px 18px; background: #0f0f23; color: #888; border: 1px solid #333;
+       cursor: pointer; font-size: 13px; border-radius: 8px 8px 0 0; }
+.mode-tab.active { background: #ff6b35; color: #fff; border-color: #ff6b35; }
+.mode-panel { display: none; }
+.mode-panel.active { display: block; }
+.project-files { max-height: 300px; overflow-y: auto; }
+.file-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.file-row input { flex: 1; background: #0f0f23; color: #e0e0e0; border: 1px solid #333;
+    border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.file-row input.name { flex: 0 0 180px; }
+.result-area { max-height: 70vh; overflow-y: auto; }
+.tab-bar { display: flex; gap: 0; margin-bottom: 12px; }
+.tab { padding: 8px 18px; background: #0f0f23; color: #888; border: 1px solid #333;
+       cursor: pointer; font-size: 12px; border-radius: 8px 8px 0 0; }
+.tab.active { background: #ff6b35; color: #fff; border-color: #ff6b35; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+#report { background: #0f0f23; border-radius: 8px; padding: 16px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-size: 14px; line-height: 1.7; max-height: 60vh; overflow-y: auto; }
+#report h2 { color: #ff6b35; font-size: 18px; margin: 16px 0 8px; border-bottom: 1px solid #333; padding-bottom: 8px; }
+#report h3 { color: #e0e0e0; font-size: 15px; margin: 12px 0 6px; }
+#report table { border-collapse: collapse; margin: 10px 0; width: 100%; }
+#report th, #report td { border: 1px solid #333; padding: 6px 12px; text-align: left; font-size: 13px; }
+#report th { background: #1a1a2e; color: #ff6b35; }
+#report code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; font-size: 12px; color: #ff6b35; }
+#report pre { background: #0a0a15; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+#report pre code { background: none; padding: 0; color: #ccc; }
+#report li { margin: 6px 0; line-height: 1.5; padding-right: 100px; }
+.fb-btn { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left: 6px; opacity: 0.5; }
+.fb-btn:hover { opacity: 1; }
+.fb-confirm { background: #1b5e20; color: #a5d6a7; }
+.fb-reject { background: #b71c1c; color: #ef9a9a; }
+#report blockquote { border-left: 2px solid #ff6b35; padding-left: 12px; color: #aaa; margin: 8px 0; }
+#report strong { color: #fff; }
+#report p { margin: 4px 0; }
+#report hr { border: none; border-top: 1px solid #222; margin: 12px 0; }
+.count-badge { display: inline-flex; align-items: center; gap: 4px;
+               padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.critical { background: #ff444422; color: #ff4444; }
+.high { background: #ff880022; color: #ff8800; }
+.medium { background: #ffcc0022; color: #ffcc00; }
+.low { background: #4488ff22; color: #4488ff; }
+.debate-card { background: #0f0f23; border-radius: 8px; padding: 16px; margin-bottom: 12px;
+               border-left: 3px solid #ff6b35; }
+.debate-card h4 { color: #ff6b35; margin-bottom: 8px; font-size: 14px; }
+.debate-round { margin: 8px 0; padding: 8px 12px; background: #1a1a2e; border-radius: 6px; }
+.debate-round .speaker { color: #ff6b35; font-weight: 600; font-size: 12px; }
+.debate-round p { font-size: 13px; color: #ccc; margin-top: 4px; }
+.agent-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.agent-col h3 { font-size: 14px; margin-bottom: 8px; padding: 8px; border-radius: 6px; text-align: center; }
+.agent-col h3.sec { background: #ff444422; color: #ff4444; }
+.agent-col h3.perf { background: #ff880022; color: #ff8800; }
+.agent-col h3.maint { background: #4488ff22; color: #4488ff; }
+.agent-item { background: #0f0f23; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
+.agent-item .title { color: #fff; font-weight: 600; }
+.agent-item .desc { color: #999; margin-top: 4px; }
+.agent-item .sev { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 6px; }
+.loading { color: #ff6b35; }
+.summary-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.timing-info { font-size: 12px; color: #666; margin-left: auto; }
+.cross-badge { background: #aa66ff22; color: #aa66ff; }
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+    <h1>Code Review Agent v3.1</h1>
+    <p>多 Agent 辩论式代码审查 | 单文件模式 + 项目目录模式 | 安全 · 性能 · 可维护性</p>
+</header>
+<div class="main">
+    <div class="panel">
+        <h2>输入代码</h2>
+        <!-- 模式切换 -->
+        <div class="mode-tabs">
+            <button class="mode-tab active" onclick="switchMode('single')">单文件审查</button>
+            <button class="mode-tab" onclick="switchMode('project')">项目审查 (多文件)</button>
+        </div>
+        <!-- 单文件模式 -->
+        <div class="mode-panel active" id="panel-single">
+            <textarea id="code" placeholder="在此粘贴代码（Python / JavaScript / TypeScript）..." style="height:340px">def login(username, password):
+    import sqlite3
+    conn = sqlite3.connect("users.db")
+    query = "SELECT * FROM users WHERE name = '" + username + "'"
+    return conn.execute(query).fetchall()</textarea>
+            <div class="controls">
+                <button id="reviewBtn" onclick="runSingleReview()">开始审查</button>
+                <select id="mode"><option value="multi">多 Agent 辩论</option><option value="single">单 Agent</option></select>
+                <button class="small" onclick="runMultiModelReview()" title="用多个模型并行投票">多模型投票</button>
+                <span id="status"></span>
+            </div>
+            <div id="progressBar" style="display:none; margin-top:8px; background:#0f0f23; border-radius:8px; padding:10px;">
+                <div style="display:flex; justify-content:space-between; font-size:12px; color:#888; margin-bottom:4px;">
+                    <span id="progressLabel">初始化...</span><span id="progressPercent">0%</span>
+                </div>
+                <div style="background:#1a1a2e; border-radius:4px; height:6px; overflow:hidden;">
+                    <div id="progressFill" style="background:#ff6b35; height:100%; width:0%; transition:width 0.3s;"></div>
+                </div>
+            </div>
+        </div>
+        <!-- 规则配置面板 -->
+        <div style="margin-top:16px; background:#16213e; border-radius:12px; padding:12px;">
+            <div onclick="document.getElementById('rulesPanel').style.display=(document.getElementById('rulesPanel').style.display==='none'?'block':'none')" style="cursor:pointer;color:#888;font-size:14px;user-select:none;">
+                &#9881; 审查规则配置 (点击展开)
+            </div>
+            <div id="rulesPanel" style="display:none;margin-top:8px;">
+                <div style="display:flex;gap:24px;flex-wrap:wrap;">
+                    <div><b style="color:#ff6b35;">安全</b><div id="rules-security"></div></div>
+                    <div><b style="color:#ff9800;">性能</b><div id="rules-performance"></div></div>
+                    <div><b style="color:#4caf50;">可维护</b><div id="rules-maintainability"></div></div>
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:#666;">勾选=启用审查规则，取消=跳过。修改后立即生效。</div>
+            </div>
+        </div>
+        <!-- 项目模式 -->
+        <div class="mode-panel" id="panel-project">
+            <input type="file" id="folderPicker" webkitdirectory style="display:none" onchange="loadFolder(event)">
+            <div class="project-files" id="projectFiles">
+                <div class="file-row">
+                    <input class="name" placeholder="文件名 (如 main.py)" value="main.py">
+                    <textarea placeholder="代码..." rows="5">def hello(): return "world"</textarea>
+                    <button class="small" onclick="delFile(this)">x</button>
+                </div>
+            </div>
+            <div class="controls">
+                <button id="projectBtn" onclick="runProjectReview()">审查项目</button>
+                <select id="projMode"><option value="multi">多 Agent 辩论</option><option value="single">单 Agent</option></select>
+                <button class="small" onclick="document.getElementById('folderPicker').click()">打开文件夹</button>
+                <button class="small" onclick="addFile()">+ 添加文件</button>
+                <span id="projStatus"></span>
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <h2>审查结果</h2>
+        <div class="summary-row">
+            <span id="summary"></span>
+            <span id="crossSummary"></span>
+            <span id="timing" class="timing-info"></span>
+        </div>
+        <div class="tab-bar">
+            <button class="tab active" onclick="switchTab('report')">审查报告</button>
+            <button class="tab" onclick="switchTab('debate')" id="debateTab">辩论过程</button>
+            <button class="tab" onclick="switchTab('agents')" id="agentsTab">Agent 对比</button>
+            <button class="small" onclick="downloadReport()" id="downloadBtn" style="display:none;margin-left:auto">下载报告 (.md)</button>
+        </div>
+        <div class="tab-content active" id="tab-report"><div id="report">等待提交代码...</div></div>
+        <div class="tab-content" id="tab-debate"><div id="debate" class="result-area"></div></div>
+        <div class="tab-content" id="tab-agents"><div id="agents" class="result-area"></div></div>
+    </div>
+</div>
+</div>
+<script>
+let currentMode = 'single';
+
+// 页面加载时获取规则配置
+fetch('/api/rules').then(r=>r.json()).then(function(rules){
+    ['security','performance','maintainability'].forEach(function(cat){
+        var div = document.getElementById('rules-'+cat);
+        (rules[cat]||[]).forEach(function(rule){
+            var label = document.createElement('label');
+            label.style.cssText = 'display:block;font-size:12px;color:#ccc;cursor:pointer;margin:2px 0;';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = rule.enabled !== false;
+            cb.style.marginRight = '6px';
+            cb.onchange = function(){
+                fetch('/api/rules/update', {method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({category:cat,rule_id:rule.id,enabled:cb.checked})});
+            };
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(rule.name));
+            div.appendChild(label);
+        });
+    });
+});
+
+function switchMode(m) {
+    currentMode = m;
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.mode-panel').forEach(p => p.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('panel-'+m).classList.add('active');
+}
+
+function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-'+name).classList.add('active');
+    event.target.classList.add('active');
+}
+
+function addFile() {
+    var div = document.createElement('div');
+    div.className = 'file-row';
+    div.innerHTML = '<input class="name" placeholder="文件名" value="file'+(Date.now()%100)+'.py"><textarea placeholder="代码..." rows="5"></textarea><button class="small" onclick="delFile(this)">x</button>';
+    document.getElementById('projectFiles').appendChild(div);
+}
+
+function delFile(btn) {
+    var rows = document.getElementById('projectFiles').children;
+    if (rows.length > 1) btn.parentElement.remove();
+}
+
+var MAX_PROJECT_FILES = 50;
+var SKIP_DIRS = ['__pycache__', '.venv', 'venv', 'node_modules', '.git', '__pycache__', 'target', 'build', '.gradle', '.idea', 'dist'];
+var CODE_EXTS = ['.py','.js','.ts','.jsx','.tsx','.java','.go'];
+
+function loadFolder(event) {
+    var files = event.target.files;
+    if (!files || files.length === 0) return;
+    var container = document.getElementById('projectFiles');
+    container.innerHTML = '';
+    var count = 0, skippedDirs = 0, skippedExt = 0;
+    var matched = [];
+    for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var name = f.webkitRelativePath || f.name;
+        // 跳过自动生成目录
+        var parts = name.split('/');
+        var shouldSkip = false;
+        for (var j = 0; j < parts.length; j++) {
+            if (SKIP_DIRS.indexOf(parts[j]) !== -1) { shouldSkip = true; break; }
+        }
+        if (shouldSkip) { skippedDirs++; continue; }
+        var ext = name.substring(name.lastIndexOf('.')).toLowerCase();
+        if (CODE_EXTS.indexOf(ext) === -1) { skippedExt++; continue; }
+        matched.push(f);
+    }
+    var toLoad = matched.slice(0, MAX_PROJECT_FILES);
+    toLoad.forEach(function(f) {
+        var name = f.webkitRelativePath || f.name;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var div = document.createElement('div');
+            div.className = 'file-row';
+            div.innerHTML = '<input class="name" value="'+name+'" readonly><textarea rows="3">'+e.target.result.substring(0,5000)+'</textarea><button class="small" onclick="delFile(this)">x</button>';
+            container.appendChild(div);
+        };
+        reader.readAsText(f.slice(0, 5000));
+        count++;
+    });
+    var msg = '已加载 '+count+' 个项目文件';
+    if (skippedDirs > 0) msg += ' (已跳过 '+skippedDirs+' 个缓存/第三方文件)';
+    if (matched.length > MAX_PROJECT_FILES) msg += ' (仅显示前 '+MAX_PROJECT_FILES+' 个)';
+    document.getElementById('projStatus').textContent = msg;
+    event.target.value = '';
+}
+
+function renderMarkdown(md) {
+    if (!md) return '';
+    return md
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/^### (.+)$/gm,'<h3>$1</h3>')
+        .replace(/^## (.+)$/gm,'<h2>$1</h2>')
+        .replace(/^# (.+)$/gm,'<h1>$1</h1>')
+        .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+        .replace(/`([^`]+)`/g,'<code>$1</code>')
+        .replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>')
+        .replace(/^- (.+)$/gm,'<li>$1</li>')
+        .replace(/^---$/gm,'<hr>')
+        .replace(/```(\w+)?\n([\s\S]*?)```/g,'<pre><code>$2</code></pre>')
+        .replace(/^(\|.+\|)$/gm, function(line) {
+            if (line.indexOf('---') >= 0) return '';
+            var cells = line.split('|').filter(function(c){return c.trim();});
+            var isHeader = line.indexOf('|-') < 0 && line.indexOf('| -') < 0;
+            var tag = isHeader ? 'th' : 'td';
+            return '<tr>' + cells.map(function(c){return '<'+tag+'>'+c.trim()+'</'+tag+'>'}).join('') + '</tr>';
+        })
+        .replace(/(<tr>[\s\S]*?<\/tr>)/g, function(m, idx) {
+            return (idx === 0 || m.indexOf('<th>') >= 0) ? '<table>'+m : m;
+        })
+        .replace(/(<\/tr>)(?![\s\S]*<tr>)/, '$1</table>')
+        .replace(/\n\n/g, '<br><br>')
+        .replace(/\n/g, '<br>');
+}
+
+function renderResult(data) {
+    var b = data.severity_breakdown || {};
+    var html = '';
+    if (b.critical) html += '<span class="count-badge critical">严重 '+b.critical+'</span> ';
+    if (b.high) html += '<span class="count-badge high">高危 '+b.high+'</span> ';
+    if (b.medium) html += '<span class="count-badge medium">中等 '+b.medium+'</span> ';
+    if (b.low) html += '<span class="count-badge low">建议 '+b.low+'</span> ';
+    document.getElementById('summary').innerHTML = html;
+
+    // cross-file findings
+    if (data.cross_file_count > 0) {
+        document.getElementById('crossSummary').innerHTML = '<span class="count-badge cross-badge">跨文件 '+data.cross_file_count+'</span>';
+    }
+
+    document.getElementById('report').innerHTML = renderMarkdown(data.report) || '审查完成，未发现问题。';
+    document.getElementById('downloadBtn').style.display = 'inline-block';
+    window._lastReport = data.report;
+    window._lastFilePath = (data.findings && data.findings.length > 0 && data.findings[0].file_path) || 'web-input';
+    // 注入反馈按钮
+    setTimeout(injectFeedbackButtons, 100);
+    document.getElementById('timing').textContent = '审查 '+data.timing.agent_time+'s | 辩论 '+data.timing.debate_count+' 轮 | 总计 '+data.timing.total_time+'s';
+
+    // 辩论
+    var transcripts = data.debate_transcripts || [];
+    document.getElementById('debateTab').textContent = transcripts.length > 0 ? '辩论过程 ('+transcripts.length+')' : '辩论过程';
+    var dh = '';
+    transcripts.forEach(function(t, i) {
+        dh += '<div class="debate-card"><h4>辩论 #'+(i+1)+': '+t.topic+'</h4>';
+        dh += '<div class="debate-round"><span class="speaker">'+t.agent_a+' Agent:</span><p>'+t.round_1+'</p></div>';
+        dh += '<div class="debate-round"><span class="speaker">'+t.agent_b+' Agent:</span><p>'+t.round_2+'</p></div>';
+        dh += '<div class="debate-round"><span class="speaker">Arbiter:</span><p>'+t.resolution+'</p></div></div>';
+    });
+    document.getElementById('debate').innerHTML = dh || '<p style="color:#666">无辩论记录</p>';
+
+    // Agent对比
+    var raw = data.agent_raw;
+    if (raw) {
+        var agents = [{name:'Security',key:'security',cls:'sec'},{name:'Performance',key:'performance',cls:'perf'},{name:'Maintainability',key:'maintainability',cls:'maint'}];
+        var ag = '<div class="agent-grid">';
+        agents.forEach(function(a) {
+            ag += '<div class="agent-col"><h3 class="'+a.cls+'">'+a.name+' ('+raw[a.key].length+')</h3>';
+            raw[a.key].forEach(function(f) {
+                ag += '<div class="agent-item"><span class="sev '+f.severity+'">'+f.severity+'</span><span class="title">'+f.title+'</span><div class="desc">'+f.description+'</div></div>';
+            });
+            if (raw[a.key].length===0) ag += '<p style="color:#666;font-size:12px">无发现</p>';
+            ag += '</div>';
+        });
+        ag += '</div>';
+        document.getElementById('agents').innerHTML = ag;
+        var total = raw.security.length+raw.performance.length+raw.maintainability.length;
+        document.getElementById('agentsTab').textContent = 'Agent 对比 ('+total+')';
+    }
+
+    var count = data.count || data.total_findings || 0;
+    document.getElementById('status').textContent = count===0 ? '未发现问题' : '发现 '+count+' 个问题';
+    document.getElementById('projStatus').textContent = count===0 ? '未发现问题' : '发现 '+count+' 个问题';
+    document.getElementById('status').style.color = count===0 ? '#4caf50' : '#ff6b35';
+    document.getElementById('projStatus').style.color = count===0 ? '#4caf50' : '#ff6b35';
+}
+
+function runSingleReview() {
+    var code = document.getElementById('code').value.trim();
+    if (!code) { alert('请先输入代码'); return; }
+    var btn = document.getElementById('reviewBtn');
+    btn.disabled = true;
+    document.getElementById('status').innerHTML = '';
+    document.getElementById('report').textContent = '';
+    document.getElementById('debate').innerHTML = '';
+    document.getElementById('agents').innerHTML = '';
+    document.getElementById('summary').innerHTML = '';
+    document.getElementById('crossSummary').innerHTML = '';
+    document.getElementById('timing').textContent = '';
+    document.getElementById('progressBar').style.display = 'block';
+    updateProgress('连接中...', 5);
+    var t0 = Date.now();
+    var wsUrl = 'ws://' + location.host + '/ws/review';
+    var ws = new WebSocket(wsUrl);
+    ws.onopen = function() {
+        updateProgress('审查开始...', 10);
+        ws.send(JSON.stringify({code:code, file_path:'web-input.py', mode:document.getElementById('mode').value}));
+    };
+    ws.onmessage = function(event) {
+        var msg = JSON.parse(event.data);
+        if (msg.type === 'progress') {
+            if (msg.agent === 'security') updateProgress('Security Agent 审查中...', 20);
+            else if (msg.agent === 'security_done') updateProgress('Security 完成 ('+msg.count+' 个发现)', 40);
+            else if (msg.agent === 'performance') updateProgress('Performance Agent 审查中...', 50);
+            else if (msg.agent === 'performance_done') updateProgress('Performance 完成 ('+msg.count+' 个发现)', 65);
+            else if (msg.agent === 'maintainability') updateProgress('Maintainability Agent 审查中...', 75);
+            else if (msg.agent === 'maintainability_done') updateProgress('Maintainability 完成 ('+msg.count+' 个发现)', 85);
+            else if (msg.stage === 'debate') updateProgress('辩论与裁决中...', 92);
+        } else if (msg.type === 'done') {
+            updateProgress('审查完成', 100);
+            var elapsed = ((Date.now()-t0)/1000).toFixed(1);
+            document.getElementById('status').textContent = msg.count === 0 ? '未发现问题' : '发现 '+msg.count+' 个问题';
+            document.getElementById('status').style.color = msg.count === 0 ? '#4caf50' : '#ff6b35';
+            btn.disabled = false;
+            setTimeout(function(){ document.getElementById('progressBar').style.display = 'none'; }, 1500);
+            // 通过 HTTP 获取完整格式化报告（含反馈按钮）
+            ws.close();
+            fallbackHttpReview(code);
+        } else if (msg.type === 'error') {
+            document.getElementById('report').textContent = '错误: ' + msg.msg;
+            document.getElementById('status').textContent = '请求失败';
+            btn.disabled = false;
+            document.getElementById('progressBar').style.display = 'none';
+        }
+    };
+    ws.onerror = function() {
+        document.getElementById('status').textContent = '连接失败，尝试 HTTP 模式...';
+        fallbackHttpReview(code);
+    };
+}
+
+function updateProgress(label, pct) {
+    document.getElementById('progressLabel').textContent = label;
+    document.getElementById('progressPercent').textContent = pct + '%';
+    document.getElementById('progressFill').style.width = pct + '%';
+}
+
+async function fallbackHttpReview(code) {
+    try {
+        var resp = await fetch('/api/review', {method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({code:code,mode:document.getElementById('mode').value})});
+        var data = await resp.json();
+        renderResult(data);
+    } catch(e) {
+        document.getElementById('report').textContent = '错误: '+e.message;
+    }
+    document.getElementById('reviewBtn').disabled = false;
+    document.getElementById('progressBar').style.display = 'none';
+}
+
+async function runProjectReview() {
+    var rows = document.getElementById('projectFiles').children;
+    var files = [];
+    for (var i=0; i<rows.length; i++) {
+        var name = rows[i].querySelector('.name').value.trim();
+        var code = rows[i].querySelector('textarea').value.trim();
+        if (name && code) files.push({name:name, code:code});
+    }
+    if (files.length===0) { alert('请至少添加一个文件'); return; }
+    var btn = document.getElementById('projectBtn');
+    btn.disabled = true;
+    document.getElementById('projStatus').innerHTML = '<span class="loading">审查 '+files.length+' 个文件...</span>';
+    document.getElementById('report').textContent = '';
+    document.getElementById('debate').innerHTML = '';
+    document.getElementById('agents').innerHTML = '';
+    document.getElementById('summary').innerHTML = '';
+    document.getElementById('crossSummary').innerHTML = '';
+    document.getElementById('timing').textContent = '';
+    try {
+        var resp = await fetch('/api/review-project', {method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({files:files,mode:document.getElementById('projMode').value})});
+        var data = await resp.json();
+        renderResult(data);
+    } catch(e) {
+        document.getElementById('report').textContent = '错误: '+e.message;
+        document.getElementById('projStatus').textContent = '请求失败';
+    } finally { btn.disabled = false; }
+}
+
+function downloadReport() {
+    var r = window._lastReport || '';
+    var b = new Blob([r], {type: 'text/markdown;charset=utf-8'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = 'review_report.md';
+    a.click();
+}
+
+function injectFeedbackButtons() {
+    var report = document.getElementById('report');
+    var lis = report.querySelectorAll('li');
+    lis.forEach(function(li) {
+        if (li.querySelector('.fb-btn')) return;
+        var strong = li.querySelector('strong');
+        if (!strong) return;
+        var title = strong.textContent.trim();
+        var c = document.createElement('span');
+        c.className = 'fb-btn fb-confirm';
+        c.textContent = '确认';
+        c.title = '确认此发现正确';
+        c.onclick = function(e){ e.stopPropagation(); submitWebFeedback(title, 'confirm', c); };
+        var r = document.createElement('span');
+        r.className = 'fb-btn fb-reject';
+        r.textContent = '驳回';
+        r.title = '驳回此发现';
+        r.onclick = function(e){ e.stopPropagation(); submitWebFeedback(title, 'reject', r); };
+        li.appendChild(c);
+        li.appendChild(r);
+    });
+}
+
+function submitWebFeedback(title, action, btn) {
+    var fp = window._lastFilePath || 'web-input';
+    fetch('/api/feedback', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({file_path: fp, title: title, action: action})
+    }).then(function(r){ return r.json(); }).then(function(d){
+        if (d.ok) {
+            btn.textContent = action === 'confirm' ? '已确认' : '已驳回';
+            btn.style.opacity = '0.5';
+            btn.onclick = null;
+        }
+    });
+}
+</script>
+</body>
+</html>

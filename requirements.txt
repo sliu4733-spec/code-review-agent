@@ -1,13 +1,21 @@
-# 自优化多智能体代码审查系统
-# 支持 Anthropic Claude / OpenAI / DeepSeek / Ollama
-
+# LLM providers
 anthropic>=0.39.0
 openai>=1.0.0
-chromadb>=0.5.0
-rich>=13.0.0
-pytest>=8.0.0
-python-dotenv>=1.0.0
+
+# App and CLI
 fastapi>=0.115.0
 uvicorn>=0.30.0
+rich>=13.0.0
+python-dotenv>=1.0.0
 pyyaml>=6.0
 jieba>=0.42
+
+# Knowledge base
+chromadb>=0.5.0
+
+# Static evidence tools
+bandit>=1.7.0
+ruff>=0.5.0
+
+# Tests
+pytest>=8.0.0

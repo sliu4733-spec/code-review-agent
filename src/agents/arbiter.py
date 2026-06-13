@@ -2,7 +2,8 @@
 
 from pathlib import Path
 from src.llm_client import LLMClient
-from src.agents.base import ReviewFinding, parse_findings
+from src.agents.base import ReviewFinding
+from src.core.reporting import normalize_findings_for_report, severity_label
 
 
 class ArbiterAgent:
@@ -50,6 +51,7 @@ class ArbiterAgent:
 
     def _build_adjudication_prompt(self, code: str, file_path: str,
                                     conflict_groups: list[list]) -> str:
+        code_context = self._build_conflict_code_context(code, conflict_groups)
         groups_text = []
         for gi, group in enumerate(conflict_groups):
             groups_text.append(f"\n### 冲突组 {gi+1}")
@@ -63,8 +65,10 @@ class ArbiterAgent:
 
 ## 代码文件: {file_path}
 
+下面只提供冲突位置附近的代码片段。不要因为片段缺少文件开头/结尾，就裁决为“文件截断、函数不完整、docstring未闭合”。
+
 ```
-{code[:3000]}
+{code_context}
 ```
 
 {"".join(groups_text)}
@@ -80,6 +84,54 @@ class ArbiterAgent:
 [{{"action": "keep", "finding_id": "xxx"}},
  {{"action": "merge", "primary_id": "xxx", "supplement_id": "yyy"}},
  {{"action": "discard", "finding_id": "zzz"}}]"""
+
+    def _build_conflict_code_context(self, code: str, conflict_groups: list[list],
+                                     context_lines: int = 8, max_chars: int = 6000) -> str:
+        lines = code.splitlines()
+        if not lines:
+            return ""
+
+        ranges = []
+        for group in conflict_groups:
+            for finding in group:
+                start, end = self._parse_line_range(getattr(finding, "line_range", ""))
+                if start > 0:
+                    ranges.append((max(1, start - context_lines), min(len(lines), end + context_lines)))
+
+        if not ranges:
+            if len(code) <= max_chars:
+                return code
+            return code[:max_chars] + "\n# ... excerpt omitted for prompt budget ..."
+
+        merged = []
+        for start, end in sorted(ranges):
+            if not merged or start > merged[-1][1] + 1:
+                merged.append([start, end])
+            else:
+                merged[-1][1] = max(merged[-1][1], end)
+
+        snippets = []
+        for start, end in merged:
+            snippets.append(f"# excerpt L{start}-L{end}")
+            for line_no in range(start, end + 1):
+                snippets.append(f"{line_no}: {lines[line_no - 1]}")
+            snippets.append("")
+            if sum(len(s) + 1 for s in snippets) >= max_chars:
+                snippets.append("# ... additional conflict context omitted for prompt budget ...")
+                break
+
+        return "\n".join(snippets)[:max_chars]
+
+    @staticmethod
+    def _parse_line_range(line_range: str) -> tuple[int, int]:
+        try:
+            text = str(line_range or "").replace("L", "").replace(" ", "")
+            parts = text.split("-")
+            start = int(parts[0])
+            end = int(parts[1]) if len(parts) > 1 else start
+            return start, end
+        except (TypeError, ValueError, IndexError):
+            return 0, 0
 
     def _get_adjudication_system_prompt(self) -> str:
         return """你是资深技术主管。裁决代码审查冲突。
@@ -117,28 +169,32 @@ class ArbiterAgent:
                         file_path: str, debate_summary: str,
                         mode: str = "multi") -> str:
         """生成一行一发现的简洁报告，无代码块，PyCharm不报红"""
-        now = __import__('datetime').datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         fname = Path(file_path).name
-        sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        final_findings = normalize_findings_for_report(final_findings)
+        sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
         sorted_f = sorted(final_findings, key=lambda f: sev_order.get(f.severity, 4))
 
         if not sorted_f:
             return ""
 
         lines = [f"## {fname}", ""]
-        sev_label = {"critical": "CRIT", "high": "HIGH", "medium": "MED", "low": "LOW"}
-
+        if debate_summary:
+            summary = debate_summary.replace("\n", "  ")
+            lines.extend([f"> {summary}", ""])
         for f in sorted_f:
-            sv = sev_label.get(f.severity, "INFO")
+            sv = severity_label(f.severity)
             cwe = f" [{f.cwe_id}]" if f.cwe_id else ""
             fid = f.finding_id if f.finding_id else ""
+            source = getattr(f, "source", "llm")
+            evidence = getattr(f, "evidence", [])
+            evidence_text = f" | evidence: {', '.join(evidence)}" if evidence else ""
             fix = ""
             if f.fix_suggestion and f.severity in ("critical", "high"):
                 fix_code = f.fix_suggestion.strip().split("\n")[0]
                 if len(fix_code) > 120:
                     fix_code = fix_code[:117] + "..."
                 fix = f" | fix: {fix_code}"
-            lines.append(f"- **{sv}** | `{f.line_range}` | {f.category} | `{fid}` | {f.title}{cwe} | {f.description}{fix}")
+            lines.append(f"- **{sv}** | `{f.line_range}` | {f.category} | {source} | `{fid}` | {f.title}{cwe} | {f.description}{evidence_text}{fix}")
 
         lines.append("")
         return "\n".join(lines)

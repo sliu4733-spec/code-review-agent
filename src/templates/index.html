@@ -116,7 +116,7 @@ select { padding: 8px 14px; background: #0f0f23; color: #e0e0e0;
     return conn.execute(query).fetchall()</textarea>
             <div class="controls">
                 <button id="reviewBtn" onclick="runSingleReview()">开始审查</button>
-                <select id="mode"><option value="multi">多 Agent 辩论</option><option value="single">单 Agent</option></select>
+                <select id="mode"><option value="adaptive">自适应路由</option><option value="multi">多 Agent 辩论</option><option value="single">单 Agent</option></select>
                 <button class="small" onclick="runMultiModelReview()" title="用多个模型并行投票">多模型投票</button>
                 <span id="status"></span>
             </div>
@@ -155,7 +155,7 @@ select { padding: 8px 14px; background: #0f0f23; color: #e0e0e0;
             </div>
             <div class="controls">
                 <button id="projectBtn" onclick="runProjectReview()">审查项目</button>
-                <select id="projMode"><option value="multi">多 Agent 辩论</option><option value="single">单 Agent</option></select>
+                <select id="projMode"><option value="adaptive">自适应路由</option><option value="multi">多 Agent 辩论</option><option value="single">单 Agent</option></select>
                 <button class="small" onclick="document.getElementById('folderPicker').click()">打开文件夹</button>
                 <button class="small" onclick="addFile()">+ 添加文件</button>
                 <span id="projStatus"></span>
@@ -327,10 +327,17 @@ function renderResult(data) {
     document.getElementById('report').innerHTML = renderMarkdown(data.report) || '审查完成，未发现问题。';
     document.getElementById('downloadBtn').style.display = 'inline-block';
     window._lastReport = data.report;
+    window._lastReportFile = data.report_file || '';
     window._lastFilePath = (data.findings && data.findings.length > 0 && data.findings[0].file_path) || 'web-input';
     // 注入反馈按钮
     setTimeout(injectFeedbackButtons, 100);
-    document.getElementById('timing').textContent = '审查 '+data.timing.agent_time+'s | 辩论 '+data.timing.debate_count+' 轮 | 总计 '+data.timing.total_time+'s';
+    var timing = data.timing || {};
+    var agentTime = timing.agent_time != null ? timing.agent_time : '-';
+    var debateCount = timing.debate_count != null ? timing.debate_count : 0;
+    var totalTime = timing.total_time != null ? timing.total_time : '-';
+    var timingText = '审查 '+agentTime+'s | 辩论 '+debateCount+' 轮 | 总计 '+totalTime+'s';
+    if (data.report_file) timingText += ' | 报告已保存: '+data.report_file;
+    document.getElementById('timing').textContent = timingText;
 
     // 辩论
     var transcripts = data.debate_transcripts || [];

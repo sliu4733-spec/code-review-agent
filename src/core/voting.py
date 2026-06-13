@@ -4,12 +4,16 @@
 DeepSeek 支持: deepseek-chat, deepseek-coder, deepseek-reasoner
 """
 
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.agents.base import ReviewFinding, parse_findings
 from src.llm_client import LLMClient
 from src.config import config
 
 DEFAULT_MODELS = ["deepseek-chat", "deepseek-coder"]
+CONSENSUS_CONFIDENCE_BONUS = 0.10
+SINGLE_MODEL_HIGH_CONFIDENCE = 0.80
+logger = logging.getLogger(__name__)
 
 
 def _get_voting_models() -> list[str]:
@@ -36,21 +40,18 @@ def run_multi_model_review(code: str, file_path: str,
 
     all_findings: list[list[ReviewFinding]] = []
 
+    client = LLMClient()
+
     def _review_with_model(model: str) -> list[ReviewFinding]:
-        client = LLMClient()
-        # 覆盖模型名：同一 API endpoint，不同 model 参数
-        from src.config import config as cfg
-        saved_model = cfg.openai_model
         try:
-            cfg.openai_model = model
             resp = client.create_message(
                 system_prompt=system_prompt, user_prompt=user_prompt,
-                max_tokens=3072, use_json=True, enable_caching=False)
+                max_tokens=3072, use_json=True, enable_caching=False,
+                model=model)
             return parse_findings(resp, "voting")
-        except Exception:
+        except Exception as exc:
+            logger.warning("Voting model %s failed: %s", model, exc)
             return []
-        finally:
-            cfg.openai_model = saved_model
 
     with ThreadPoolExecutor(max_workers=len(models)) as executor:
         futures = {executor.submit(_review_with_model, m): m for m in models}
@@ -59,8 +60,8 @@ def run_multi_model_review(code: str, file_path: str,
                 findings = future.result()
                 if findings:
                     all_findings.append(findings)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Voting future failed for model %s: %s", futures[future], exc)
 
     return _aggregate_votes(all_findings)
 
@@ -84,9 +85,9 @@ def _aggregate_votes(all_findings: list[list[ReviewFinding]]) -> list[ReviewFind
     for key, fs in votes.items():
         if len(fs) >= 2:
             best = max(fs, key=lambda x: x.confidence)
-            best.confidence = min(1.0, best.confidence + 0.1)
+            best.confidence = min(1.0, best.confidence + CONSENSUS_CONFIDENCE_BONUS)
             result.append(best)
-        elif len(all_findings) == 2 and len(fs) == 1 and fs[0].confidence >= 0.8:
+        elif len(all_findings) == 2 and len(fs) == 1 and fs[0].confidence >= SINGLE_MODEL_HIGH_CONFIDENCE:
             result.append(fs[0])
 
     result.sort(key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x.severity, 4))

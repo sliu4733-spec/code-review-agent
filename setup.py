@@ -7,11 +7,16 @@ setup(
     install_requires=[
         "anthropic>=0.39.0",
         "openai>=1.0.0",
-        "chromadb>=0.5.0",
-        "rich>=13.0.0",
-        "python-dotenv>=1.0.0",
         "fastapi>=0.115.0",
         "uvicorn>=0.30.0",
+        "rich>=13.0.0",
+        "python-dotenv>=1.0.0",
+        "pyyaml>=6.0",
+        "jieba>=0.42",
+        "chromadb>=0.5.0",
+        "bandit>=1.7.0",
+        "ruff>=0.5.0",
+        "pytest>=8.0.0",
     ],
     entry_points={
         "console_scripts": [

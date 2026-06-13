@@ -5,7 +5,7 @@ const app = express();
 
 // 硬编码数据库密码
 const DB_PASSWORD = 'admin123456';
-const API_KEY = 'sk-abc123def456ghi789jkl012mno345pqr678stu';
+const API_KEY = 'benchmark_fake_api_key';
 
 app.get('/user', (req, res) => {
     const name = req.query.name;

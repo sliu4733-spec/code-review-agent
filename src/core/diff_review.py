@@ -1,12 +1,12 @@
 """增量审查：仅审查 Git diff 变更部分"""
 
+import re
 import subprocess
 from pathlib import Path
 
 
 def _validate_repo_path(repo_path: str) -> bool:
     """校验仓库路径合法性，防止路径遍历和非法字符注入"""
-    import re
     p = Path(repo_path).resolve()
     if not p.exists() or not p.is_dir():
         return False
@@ -19,8 +19,22 @@ def _validate_repo_path(repo_path: str) -> bool:
 
 def _validate_branch(branch: str) -> bool:
     """校验分支名合法性"""
-    import re
     return bool(re.match(r'^[a-zA-Z0-9._\-~/]+$', branch))
+
+
+def _validate_diff_file(repo_path: str, file_path: str) -> bool:
+    """Ensure diff file path is a relative path inside the repository."""
+    if not file_path or Path(file_path).is_absolute():
+        return False
+    if re.search(r'[;&|`$]', file_path):
+        return False
+    repo = Path(repo_path).resolve()
+    target = (repo / file_path).resolve()
+    try:
+        target.relative_to(repo)
+    except ValueError:
+        return False
+    return True
 
 
 def get_diff_files(repo_path: str, base_branch: str = "HEAD~1") -> list[str]:
@@ -38,12 +52,51 @@ def get_diff_files(repo_path: str, base_branch: str = "HEAD~1") -> list[str]:
         return []
 
 
+def get_all_file_diffs(repo_path: str, base_branch: str = "HEAD~1") -> dict[str, str]:
+    """一次性获取全部 diff，并按文件拆分，避免为每个文件重复启动 git。"""
+    if not _validate_repo_path(repo_path) or not _validate_branch(base_branch):
+        return {}
+    try:
+        repo = str(Path(repo_path).resolve())
+        result = subprocess.run(
+            ["git", "-C", repo, "diff", base_branch, "--"],
+            capture_output=True, text=True, timeout=20)
+        if result.returncode != 0:
+            return {}
+        return _split_diff_by_file(result.stdout)
+    except Exception:
+        return {}
+
+
+def _split_diff_by_file(diff_text: str) -> dict[str, str]:
+    file_diffs: dict[str, list[str]] = {}
+    current_file = ""
+
+    for line in diff_text.splitlines():
+        match = re.match(r"diff --git a/(.+?) b/(.+)", line)
+        if match:
+            current_file = match.group(2)
+            file_diffs[current_file] = [line]
+            continue
+        if current_file:
+            file_diffs[current_file].append(line)
+
+    return {file_path: "\n".join(lines) for file_path, lines in file_diffs.items()}
+
+
 def get_file_diff(repo_path: str, file_path: str,
                   base_branch: str = "HEAD~1") -> str:
     """获取单个文件相对于 base_branch 的 diff"""
+    if (
+        not _validate_repo_path(repo_path)
+        or not _validate_branch(base_branch)
+        or not _validate_diff_file(repo_path, file_path)
+    ):
+        return ""
     try:
+        repo = str(Path(repo_path).resolve())
         result = subprocess.run(
-            ["git", "-C", repo_path, "diff", base_branch, "--", file_path],
+            ["git", "-C", repo, "diff", base_branch, "--", file_path],
             capture_output=True, text=True, timeout=10)
         return result.stdout.strip()
     except Exception:
@@ -57,7 +110,6 @@ def extract_changed_lines(diff_text: str, original_code: str) -> str:
 
     # 解析 diff 中 + 开头的行号
     changed_lines = set()
-    current_line = 0
     for line in diff_text.split("\n"):
         if line.startswith("@@"):
             parts = line.split(" ")
@@ -70,8 +122,6 @@ def extract_changed_lines(diff_text: str, original_code: str) -> str:
                             changed_lines.add(i)
                     except (ValueError, IndexError):
                         pass
-        elif line.startswith("+") and not line.startswith("+++"):
-            current_line += 1
 
     if not changed_lines:
         return original_code[:5000]
@@ -96,6 +146,7 @@ def run_diff_review(repo_path: str, base_branch: str = "HEAD~1") -> dict:
         return {"files": [], "message": "无变更文件"}
 
     supported_exts = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go"}
+    file_diffs = get_all_file_diffs(repo_path, base_branch)
     review_files = []
     for f in changed:
         ext = Path(f).suffix.lower()
@@ -103,7 +154,7 @@ def run_diff_review(repo_path: str, base_branch: str = "HEAD~1") -> dict:
             full_path = str(Path(repo_path) / f)
             try:
                 original = Path(full_path).read_text(encoding="utf-8", errors="ignore")
-                diff = get_file_diff(repo_path, f, base_branch)
+                diff = file_diffs.get(f) or get_file_diff(repo_path, f, base_branch)
                 snippet = extract_changed_lines(diff, original)
                 review_files.append((f, snippet, original[:500]))
             except Exception:

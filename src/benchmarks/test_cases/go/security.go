@@ -10,7 +10,7 @@ import (
     "os"
 )
 
-var apiKey = "sk-abc123def456ghi789"
+var apiKey = "benchmark_fake_api_key"
 
 func getUser(db *sql.DB, username string) (*User, error) {
     // SQL 注入：fmt.Sprintf 拼接

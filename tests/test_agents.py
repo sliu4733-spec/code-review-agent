@@ -48,6 +48,16 @@ class TestParseFindings:
         findings = parse_findings(text, "performance")
         assert len(findings) == 1
 
+    def test_general_agent_missing_category_is_inferred(self):
+        text = '{"findings": [{"severity": "high", "title": "SQL injection in query", "description": "user input reaches execute", "line_range": "L10", "fix_suggestion": "Use parameters", "confidence": 0.8}]}'
+        findings = parse_findings(text, "general")
+        assert findings[0].category == "security"
+
+    def test_chinese_category_is_normalized(self):
+        text = '{"findings": [{"category": "性能问题", "severity": "medium", "title": "N+1 query", "description": "query is executed in a loop", "line_range": "L3", "fix_suggestion": "Batch load", "confidence": 0.7}]}'
+        findings = parse_findings(text, "general")
+        assert findings[0].category == "performance"
+
 
 class TestAgentInit:
     def test_security_agent_init(self):

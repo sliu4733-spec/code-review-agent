@@ -3,7 +3,7 @@ import java.sql.*;
 
 public class UserService {
     private static final String DB_PASSWORD = "admin123456";
-    private static final String API_KEY = "sk-abc123def456ghi789";
+    private static final String API_KEY = "benchmark_fake_api_key";
 
     public User getUser(String username) throws SQLException {
         Connection conn = DriverManager.getConnection("jdbc:mysql://localhost/db", "root", DB_PASSWORD);

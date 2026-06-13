@@ -21,7 +21,7 @@ def get_user_by_id(user_id):
 
 
 # 硬编码密钥
-API_KEY = "sk-abc123def456ghi789jkl012mno345pqr678stu"
+API_KEY = "benchmark_fake_api_key"
 DATABASE_PASSWORD = "admin123456"
 
 

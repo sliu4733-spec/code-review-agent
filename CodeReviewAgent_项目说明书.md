@@ -1,7 +1,5 @@
 # Adaptive Code Review Agent 项目说明书
 
-生成日期：2026-06-13  
-项目目录：`C:\Users\Administrator\code-review-agent`
 
 ## 1. 项目简介
 
